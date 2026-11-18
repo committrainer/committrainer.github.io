@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>コミットレーナー</title>
+<!-- コミットレーナー 段階4(2026-11-18)。LINE ミニアプリの画面。記録をつける・記録を見る・設定。 -->
+<style>
+  :root {
+    --orange: #F28C28; --orange-dark: #B85C00; --orange-light: #FFF1E0;
+    --navy: #1F2A44; --gray: #F4F4F4; --line: #E8E8E8;
+    --text: #222222; --sub: #777777; --bg: #FAFAF7; --card: #FFFFFF;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    -webkit-text-size-adjust: 100%; }
+  button, input, textarea { font: inherit; color: inherit; }
+  main { max-width: 560px; margin: 0 auto; padding: 16px 16px calc(96px + env(safe-area-inset-bottom)); }
+  h1 { font-size: 20px; margin: 4px 0 2px; }
+  h2 { font-size: 13px; color: var(--sub); margin: 0 0 10px; font-weight: 700; }
+  .sub { color: var(--sub); font-size: 13px; }
+  .card { background: var(--card); border-radius: 14px; padding: 16px; margin-bottom: 12px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+  .head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 12px; }
+  .streak { background: var(--orange); color: #fff; border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+  .chips { display: flex; gap: 8px; margin-bottom: 12px; }
+  .chip { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 14px; font-size: 14px; }
+  .chip.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; border: 0; border-radius: 10px;
+    background: var(--gray); padding: 14px; margin-bottom: 8px; font-size: 16px; cursor: pointer; }
+  .row:last-child { margin-bottom: 0; }
+  .row .mark { font-size: 20px; width: 24px; text-align: center; }
+  .row.done { background: var(--orange-light); color: var(--orange-dark); font-weight: 700; }
+  .conds { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .cond { border: 0; border-radius: 10px; background: var(--gray); padding: 10px 0; font-size: 28px; cursor: pointer; }
+  .cond small { display: block; font-size: 11px; color: var(--sub); margin-top: 2px; }
+  .cond.on { background: var(--orange); }
+  .cond.on small { color: #fff; }
+  .inline { display: flex; gap: 8px; }
+  input[type=number], input[type=text], input[type=time], textarea {
+    width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: #fff; font-size: 16px; }
+  textarea { min-height: 84px; resize: vertical; }
+  .btn { border: 0; border-radius: 10px; background: var(--orange); color: #fff; font-weight: 700; padding: 12px 18px;
+    font-size: 15px; white-space: nowrap; cursor: pointer; }
+  .btn.ghost { background: #fff; color: var(--navy); border: 1px solid var(--line); }
+  .btn.wide { width: 100%; margin-top: 10px; }
+  .btn:disabled { opacity: .5; }
+  .reply { margin-top: 10px; background: var(--orange-light); border-radius: 10px; padding: 12px; font-size: 14px; white-space: pre-wrap; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .stat { background: var(--card); border-radius: 14px; padding: 12px 8px; text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+  .stat b { display: block; font-size: 24px; color: var(--orange-dark); }
+  .stat span { font-size: 12px; color: var(--sub); }
+  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; font-size: 12px; }
+  .cal .wd { color: var(--sub); padding-bottom: 2px; }
+  .cal .d { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: var(--gray); color: var(--sub); }
+  .cal .d.done { background: var(--orange); color: #fff; font-weight: 700; }
+  .cal .d.today { outline: 2px solid var(--navy); outline-offset: -2px; }
+  .cal .d.future { background: transparent; }
+  svg { display: block; width: 100%; height: auto; }
+  .diary { border-top: 1px solid var(--line); padding: 10px 0; font-size: 14px; }
+  .diary:first-of-type { border-top: 0; padding-top: 0; }
+  .diary .when { font-size: 12px; color: var(--sub); }
+  .check { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); }
+  .check:first-of-type { border-top: 0; }
+  .check input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--orange); flex: none; }
+  .check .note { font-size: 12px; color: var(--sub); }
+  .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .day { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 10px 0; font-size: 15px; cursor: pointer; }
+  .day.on { background: var(--navy); border-color: var(--navy); color: #fff; font-weight: 700; }
+  .goal { font-size: 16px; font-weight: 700; line-height: 1.5; }
+  nav { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--line);
+    display: grid; grid-template-columns: repeat(3, 1fr); padding-bottom: env(safe-area-inset-bottom); z-index: 5; }
+  nav button { border: 0; background: none; padding: 10px 0 12px; font-size: 12px; color: var(--sub); cursor: pointer; }
+  nav button b { display: block; font-size: 20px; margin-bottom: 2px; font-weight: 400; }
+  nav button.on { color: var(--orange-dark); font-weight: 700; }
+  #toast { position: fixed; left: 16px; right: 16px; bottom: calc(76px + env(safe-area-inset-bottom)); max-width: 528px; margin: 0 auto;
+    background: var(--navy); color: #fff; border-radius: 12px; padding: 12px 14px; font-size: 14px; white-space: pre-wrap;
+    opacity: 0; transform: translateY(8px); transition: .2s; pointer-events: none; z-index: 6; }
+  #toast.show { opacity: 1; transform: none; }
+  .center { text-align: center; padding: 48px 16px; color: var(--sub); line-height: 1.7; }
+  .spin { display: inline-block; width: 22px; height: 22px; border: 3px solid var(--line); border-top-color: var(--orange);
+    border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<main id="app"><div class="center"><span class="spin"></span><br>読み込んでいます</div></main>
+<nav id="nav" hidden>
+  <button data-tab="record"><b>✏️</b>記録をつける</button>
+  <button data-tab="view"><b>📈</b>記録を見る</button>
+  <button data-tab="settings"><b>⚙️</b>設定</button>
+</nav>
+<div id="toast"></div>
+
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script>
+// ---------------------------------------------------------------- 設定
+const LIFF_ID = '2012681803-qywvqrPo'; // 本番用
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwVu-c1axrkJg6-0V7qVEvl1SwNQouhXFHYq_nlNqukYx64JDV40rF7kX4vz0glsUuZ4Q/exec'; // GAS のデプロイの URL
+
+// 設定で選べる項目(設計書 6)。名前は記録に残るので、変えるときは前の名前の記録に気をつける。
+const ITEM_CHOICES = [
+  { name: 'ジムに行く', note: '決めた曜日に、ジムへ行く' },
+  { name: '起床・就寝', note: '毎日同じ時刻に起きて寝る。睡眠は7時間以上' },
+  { name: '朝の散歩', note: '朝に10分歩く' },
+  { name: '瞑想', note: '3分、目を閉じて呼吸に集中する' },
+  { name: 'ビジュアライゼーション', note: '1分、理想の自分を思い浮かべる' },
+  { name: '鏡で目標を言う', note: '鏡の前で、目標を声に出す' },
+  { name: '毎食たんぱく源', note: '毎食、卵・肉・豆腐・納豆のどれかを食べる' },
+  { name: 'たんぱく質', note: '体重1kgあたり1.5〜2gを目安に' }
+];
+const COND_EMOJI = { 'いい': '😄', 'ふつう': '🙂', 'だるい': '😩', '痛みあり': '🤕' };
+const WEEKDAYS = '月火水木金土日';
+
+// ---------------------------------------------------------------- 状態
+let S = null;          // GAS から届いた状態
+let idToken = '';
+let tab = 'record';
+let date = '';         // 記録をつける日
+let pending = 0;       // 返事を待っている数。0 になるまで、届いた状態で画面を上書きしない
+let queue = Promise.resolve();
+let draft = null;      // 設定の書きかけ
+let diaryReply = '';
+
+const $app = document.getElementById('app');
+
+// ---------------------------------------------------------------- 道具
+function el(tag, attrs, children) {
+  const e = document.createElement(tag);
+  Object.keys(attrs || {}).forEach(function (k) {
+    if (k === 'class') e.className = attrs[k];
+    else if (k === 'text') e.textContent = attrs[k];
+    else if (k.slice(0, 2) === 'on') e.addEventListener(k.slice(2), attrs[k]);
+    else if (attrs[k] !== false && attrs[k] != null) e.setAttribute(k, attrs[k] === true ? '' : attrs[k]);
+  });
+  (children || []).forEach(function (c) { if (c != null) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+  return e;
+}
+function addDays(d, n) {
+  const p = d.split('-').map(Number);
+  const t = new Date(Date.UTC(p[0], p[1] - 1, p[2] + n, 12));
+  return t.toISOString().slice(0, 10);
+}
+function weekdayIndex(d) { // 月=0 … 日=6
+  const p = d.split('-').map(Number);
+  return (new Date(Date.UTC(p[0], p[1] - 1, p[2], 12)).getUTCDay() + 6) % 7;
+}
+function fmtDay(d) {
+  const p = d.split('-').map(Number);
+  return p[1] + '/' + p[2] + '(' + WEEKDAYS.charAt(weekdayIndex(d)) + ')';
+}
+function dayOf(d) { return (S.days && S.days[d]) || { items: {}, condition: '', weight: null, diary: '' }; }
+function countDone(day) {
+  if (!day) return 0;
+  return Object.keys(day.items).filter(function (k) { return day.items[k]; }).length + (day.weight != null ? 1 : 0) + (day.diary ? 1 : 0);
+}
+let toastTimer = null;
+function toast(text) {
+  const t = document.getElementById('toast');
+  t.textContent = text;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { t.classList.remove('show'); }, 3200);
+}
+function fatal(text) {
+  document.getElementById('nav').hidden = true;
+  $app.replaceChildren(el('div', { class: 'center', text: text }));
+}
+const ERRORS = {
+  auth: 'ログインの期限が切れました。画面を閉じて、もう一度開いてください。',
+  setup: '先に、トークで最初の設定(目標など)を終えてください。終わったら、この画面が使えます。',
+  friend: '先に、コミットレーナーを友だち追加してください。',
+  server: 'うまく保存できませんでした。少し時間をおいて、もう一度試してください。',
+  bad: '入力を確かめて、もう一度試してください。',
+  network: 'つながりませんでした。電波のよいところで、もう一度試してください。'
+};
+
+// ---------------------------------------------------------------- GAS とのやりとり
+function api(payload) {
+  return fetch(GAS_URL, { method: 'POST', body: JSON.stringify(Object.assign({ idToken: idToken }, payload)) })
+    .then(function (r) { return r.json(); })
+    .catch(function () { return { ok: false, error: 'network' }; });
+}
+// 順番に送る。押した順に保存されるようにするため。
+function send(payload, onDone) {
+  pending++;
+  queue = queue.then(function () { return api(payload); }).then(function (res) {
+    pending--;
+    if (res.ok) {
+      if (res.messages && res.messages.length) toast(res.messages.join('\n'));
+      if (pending === 0) { S = res; render(); }
+    } else {
+      toast(ERRORS[res.error] || ERRORS.server);
+      if (res.error === 'setup' || res.error === 'friend') return fatal(ERRORS[res.error]);
+      if (pending === 0) reload();
+    }
+    if (onDone) onDone(res);
+  });
+}
+function reload() {
+  api({ api: 'load' }).then(function (res) { if (res.ok) { S = res; render(); } });
+}
+
+// ---------------------------------------------------------------- 画面: 記録をつける
+function renderRecord() {
+  if (S.editable.indexOf(date) < 0) date = S.today;
+  const day = dayOf(date);
+  const isToday = date === S.today;
+  const out = [];
+
+  out.push(el('div', { class: 'head' }, [
+    el('div', {}, [el('div', { class: 'sub', text: isToday ? '今日の記録' : 'きのうの記録' }), el('h1', { text: fmtDay(date) })]),
+    el('span', { class: 'streak', text: S.streak > 0 ? '連続 ' + S.streak + ' 日' : '今日から始めよう' })
+  ]));
+  out.push(el('div', { class: 'chips' }, S.editable.map(function (d, i) {
+    return el('button', { class: 'chip' + (d === date ? ' on' : ''), text: i === 0 ? '今日' : 'きのう',
+      onclick: function () { date = d; diaryReply = ''; render(); } });
+  })));
+
+  // ルーティン。押した瞬間に印を付けて、裏で保存する。
+  out.push(el('section', { class: 'card' }, [el('h2', { text: 'ルーティン' })].concat(S.user.items.map(function (name) {
+    const done = !!day.items[name];
+    return el('button', { class: 'row' + (done ? ' done' : ''), onclick: function () {
+      const value = !day.items[name];
+      day.items[name] = value;
+      if (S.days) S.days[date] = day;
+      render();
+      send({ api: 'set', date: date, kind: 'item', name: name, value: value });
+    } }, [el('span', { class: 'mark', text: done ? '✅' : '⬜' }), el('span', { text: name })]);
+  }))));
+
+  // 調子
+  out.push(el('section', { class: 'card' }, [
+    el('h2', { text: (isToday ? '今日' : 'きのう') + 'の調子' }),
+    el('div', { class: 'conds' }, S.conditions.map(function (c) {
+      return el('button', { class: 'cond' + (day.condition === c ? ' on' : ''), onclick: function () {
+        day.condition = c;
+        if (S.days) S.days[date] = day;
+        render();
+        send({ api: 'set', date: date, kind: 'cond', value: c });
+      } }, [COND_EMOJI[c] || c, el('small', { text: c })]);
+    }))
+  ]));
+
+  // 体重
+  const w = el('input', { type: 'number', inputmode: 'decimal', step: '0.1', min: '20', max: '300', placeholder: '例: 55.2',
+    value: day.weight != null ? day.weight : '' });
+  out.push(el('section', { class: 'card' }, [
+    el('h2', { text: '体重(kg)' }),
+    el('div', { class: 'inline' }, [w, el('button', { class: 'btn', text: '保存', onclick: function () {
+      const v = String(w.value).trim();
+      if (!/^\d{2,3}(\.\d{1,2})?$/.test(v)) return toast('体重は、数字で入れてください(例: 55.2)');
+      day.weight = Number(v);
+      send({ api: 'set', date: date, kind: 'weight', value: v });
+      w.blur();
+    } })])
+  ]));
+
+  // 一言日記。保存すると、AI のひとことが返ってくる。
+  const ta = el('textarea', { maxlength: '1000', placeholder: '今日のひとこと(どんなことでも大丈夫です)' });
+  ta.value = day.diary || '';
+  const saveBtn = el('button', { class: 'btn wide', text: '日記を保存', onclick: function () {
+    const text = ta.value.trim();
+    if (!text) return toast('ひとことを書いてから保存してください');
+    saveBtn.disabled = true;
+    saveBtn.textContent = '返事を書いています…';
+    day.diary = text;
+    send({ api: 'diary', date: date, text: text }, function (res) {
+      diaryReply = res.ok && res.messages && res.messages.length ? res.messages.join('\n') : '';
+      if (pending === 0) render();
+    });
+  } });
+  const diaryCard = el('section', { class: 'card' }, [el('h2', { text: '一言日記' }), ta, saveBtn]);
+  if (diaryReply) diaryCard.appendChild(el('div', { class: 'reply', text: diaryReply }));
+  out.push(diaryCard);
+  return out;
+}
+
+// ---------------------------------------------------------------- 画面: 記録を見る
+function renderView() {
+  const out = [];
+  const today = S.today;
+  const monday = addDays(today, -weekdayIndex(today));
+  let gymWeek = 0, done30 = 0;
+  for (let i = 0; i < 7; i++) { const d = addDays(monday, i); if (d <= today && dayOf(d).items['ジムに行く']) gymWeek++; }
+  for (let i = 0; i < 30; i++) { if (countDone(dayOf(addDays(today, -i))) > 0) done30++; }
+
+  out.push(el('h1', { text: '記録を見る' }));
+  out.push(el('div', { class: 'sub', text: S.user.goal ? '目標: ' + S.user.goal : '' }));
+  out.push(el('div', { style: 'height:12px' }));
+  out.push(el('div', { class: 'stats' }, [
+    el('div', { class: 'stat' }, [el('b', { text: String(S.streak) }), el('span', { text: '連続日数' })]),
+    el('div', { class: 'stat' }, [el('b', { text: String(gymWeek) }), el('span', { text: '今週のジム' })]),
+    el('div', { class: 'stat' }, [el('b', { text: String(done30) }), el('span', { text: '30日でできた日' })])
+  ]));
+
+  // カレンダー(5週。月曜はじまり)
+  const start = addDays(monday, -28);
+  const cal = el('div', { class: 'cal' }, WEEKDAYS.split('').map(function (w) { return el('div', { class: 'wd', text: w }); }));
+  for (let i = 0; i < 35; i++) {
+    const d = addDays(start, i);
+    const cls = 'd' + (d > today ? ' future' : countDone(dayOf(d)) > 0 ? ' done' : '') + (d === today ? ' today' : '');
+    cal.appendChild(el('div', { class: cls, text: String(Number(d.slice(8))) }));
+  }
+  out.push(el('section', { class: 'card' }, [el('h2', { text: 'できた日(オレンジ)' }), cal]));
+
+  // 体重の移り変わり
+  const pts = Object.keys(S.days).sort().filter(function (d) { return S.days[d].weight != null; })
+    .map(function (d) { return { d: d, w: Number(S.days[d].weight) }; });
+  const wCard = el('section', { class: 'card' }, [el('h2', { text: '体重の移り変わり' })]);
+  if (pts.length >= 2) {
+    const ws = pts.map(function (p) { return p.w; });
+    let lo = Math.min.apply(null, ws), hi = Math.max.apply(null, ws);
+    if (hi - lo < 1) { lo -= 0.5; hi += 0.5; }
+    const W = 320, H = 140, L = 34, R = 10, T = 10, B = 22;
+    const t0 = Date.parse(pts[0].d), t1 = Date.parse(pts[pts.length - 1].d);
+    const x = function (d) { return L + (W - L - R) * (t1 === t0 ? 0.5 : (Date.parse(d) - t0) / (t1 - t0)); };
+    const y = function (v) { return T + (H - T - B) * (1 - (v - lo) / (hi - lo)); };
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', '体重のグラフ');
+    function add(tag, a, text) {
+      const n = document.createElementNS(ns, tag);
+      Object.keys(a).forEach(function (k) { n.setAttribute(k, a[k]); });
+      if (text) n.textContent = text;
+      svg.appendChild(n);
+    }
+    [hi, (hi + lo) / 2, lo].forEach(function (v) {
+      add('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: '#E8E8E8' });
+      add('text', { x: L - 4, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 10, fill: '#777' }, v.toFixed(1));
+    });
+    add('polyline', { points: pts.map(function (p) { return x(p.d) + ',' + y(p.w); }).join(' '), fill: 'none', stroke: '#F28C28', 'stroke-width': 2.5, 'stroke-linejoin': 'round' });
+    pts.forEach(function (p) { add('circle', { cx: x(p.d), cy: y(p.w), r: 3, fill: '#F28C28' }); });
+    add('text', { x: L, y: H - 6, 'font-size': 10, fill: '#777' }, fmtDay(pts[0].d));
+    add('text', { x: W - R, y: H - 6, 'font-size': 10, fill: '#777', 'text-anchor': 'end' }, fmtDay(pts[pts.length - 1].d));
+    wCard.appendChild(svg);
+    const diff = Math.round((pts[pts.length - 1].w - pts[0].w) * 10) / 10;
+    wCard.appendChild(el('div', { class: 'sub', text: '最新 ' + pts[pts.length - 1].w + 'kg(' + fmtDay(pts[0].d) + 'から ' + (diff > 0 ? '+' : '') + diff + 'kg)' }));
+  } else {
+    wCard.appendChild(el('div', { class: 'sub', text: '体重を2回以上記録すると、ここにグラフが出ます。' }));
+  }
+  out.push(wCard);
+
+  // 日記
+  const notes = Object.keys(S.days).sort().reverse().filter(function (d) { return S.days[d].diary; }).slice(0, 14);
+  const dCard = el('section', { class: 'card' }, [el('h2', { text: '一言日記' })]);
+  if (!notes.length) dCard.appendChild(el('div', { class: 'sub', text: 'まだ日記はありません。' }));
+  notes.forEach(function (d) {
+    const c = S.days[d].condition;
+    dCard.appendChild(el('div', { class: 'diary' }, [
+      el('div', { class: 'when', text: fmtDay(d) + (c ? ' ' + (COND_EMOJI[c] || c) : '') }),
+      el('div', { text: S.days[d].diary })
+    ]));
+  });
+  out.push(dCard);
+  return out;
+}
+
+// ---------------------------------------------------------------- 画面: 設定
+function pad(hm) { const p = String(hm).split(':'); return ('0' + p[0]).slice(-2) + ':' + ('0' + (p[1] || '0')).slice(-2); }
+function renderSettings() {
+  if (!draft) draft = { items: S.user.items.slice(), notifyAt: pad(S.user.notifyAt), gymDays: S.user.gymDays || '' };
+  const out = [el('h1', { text: '設定' }), el('div', { style: 'height:12px' })];
+
+  // 目標
+  out.push(el('section', { class: 'card' }, [
+    el('h2', { text: '目標' }),
+    el('div', { class: 'goal', text: S.user.goal || 'まだ決まっていません' }),
+    S.user.deadline ? el('div', { class: 'sub', text: '期限 ' + S.user.deadline }) : null,
+    el('button', { class: 'btn ghost wide', text: '目標を決め直す(トークで)', onclick: restartGoal })
+  ]));
+
+  // 項目
+  const choices = ITEM_CHOICES.slice();
+  draft.items.forEach(function (n) { if (!choices.some(function (c) { return c.name === n; })) choices.push({ name: n, note: '自分で足した項目' }); });
+  const list = el('section', { class: 'card' }, [el('h2', { text: '毎日のチェックの項目' })]);
+  choices.forEach(function (c) {
+    const box = el('input', { type: 'checkbox', checked: draft.items.indexOf(c.name) >= 0 });
+    box.addEventListener('change', function () {
+      if (box.checked) draft.items.push(c.name);
+      else draft.items = draft.items.filter(function (n) { return n !== c.name; });
+    });
+    list.appendChild(el('label', { class: 'check' }, [box, el('div', {}, [el('div', { text: c.name }), el('div', { class: 'note', text: c.note })])]));
+  });
+  const custom = el('input', { type: 'text', maxlength: '15', placeholder: '自分で足す(15文字まで)' });
+  list.appendChild(el('div', { class: 'inline', style: 'margin-top:10px' }, [custom, el('button', { class: 'btn ghost', text: '足す', onclick: function () {
+    const v = custom.value.replace(/[,，、]/g, ' ').trim();
+    if (!v) return;
+    if (draft.items.indexOf(v) < 0) draft.items.push(v);
+    render();
+  } })]));
+  list.appendChild(el('div', { class: 'note sub', style: 'margin-top:8px', text: '最初は少なめがおすすめです。慣れてきたら、1つずつ増やしましょう。' }));
+  out.push(list);
+
+  // 通知の時刻
+  const time = el('input', { type: 'time', value: draft.notifyAt });
+  time.addEventListener('change', function () { draft.notifyAt = time.value; });
+  out.push(el('section', { class: 'card' }, [el('h2', { text: 'チェックのカードが届く時刻' }), time]));
+
+  // ジムの曜日
+  out.push(el('section', { class: 'card' }, [el('h2', { text: 'ジムに行く曜日' }), el('div', { class: 'days' }, WEEKDAYS.split('').map(function (w) {
+    return el('button', { class: 'day' + (draft.gymDays.indexOf(w) >= 0 ? ' on' : ''), text: w, onclick: function () {
+      draft.gymDays = draft.gymDays.indexOf(w) >= 0 ? draft.gymDays.replace(w, '') : draft.gymDays + w;
+      render();
+    } });
+  }))]));
+
+  const save = el('button', { class: 'btn wide', text: '保存する', onclick: function () {
+    if (!draft.items.length) return toast('項目を1つ以上選んでください');
+    if (!draft.notifyAt) return toast('時刻を選んでください');
+    save.disabled = true;
+    save.textContent = '保存しています…';
+    send({ api: 'settings', items: draft.items, notifyAt: draft.notifyAt, gymDays: draft.gymDays }, function (res) {
+      if (res.ok) draft = null;
+      if (pending === 0) render();
+    });
+  } });
+  out.push(save);
+  return out;
+}
+
+function restartGoal() {
+  if (!confirm('目標の決め直しを、トークで始めます。最初の設定の質問に、もう一度答えてもらいます。よいですか？')) return;
+  const word = S.goalRestartWord;
+  Promise.resolve()
+    .then(function () { return liff.sendMessages([{ type: 'text', text: word }]); })
+    .then(function () { liff.closeWindow(); })
+    .catch(function () { alert('トークに「' + word + '」と送ってください。目標の決め直しが始まります。'); });
+}
+
+// ---------------------------------------------------------------- 全体
+function render() {
+  const nav = document.getElementById('nav');
+  nav.hidden = false;
+  Array.prototype.forEach.call(nav.querySelectorAll('button'), function (b) { b.classList.toggle('on', b.dataset.tab === tab); });
+  const parts = tab === 'view' ? renderView() : tab === 'settings' ? renderSettings() : renderRecord();
+  $app.replaceChildren.apply($app, parts);
+}
+Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (b) {
+  b.addEventListener('click', function () { tab = b.dataset.tab; window.scrollTo(0, 0); render(); });
+});
+
+function start() {
+  if (typeof liff === 'undefined') return fatal(ERRORS.network);
+  liff.init({ liffId: LIFF_ID }).then(function () {
+    if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
+    idToken = liff.getIDToken() || '';
+    if (!idToken) return fatal('ログインの情報を読めませんでした。LINE のアプリから開いてください。');
+    const p = new URLSearchParams(location.search).get('p');
+    tab = p === 'view' || p === 'settings' ? p : 'record';
+    return api({ api: 'load' }).then(function (res) {
+      if (!res.ok) return fatal(ERRORS[res.error] || ERRORS.server);
+      S = res;
+      date = S.today;
+      render();
+    });
+  }).catch(function (err) {
+    console.error(err);
+    fatal('画面を開けませんでした。LINE のアプリから、もう一度開いてください。');
+  });
+}
+start();
+</script>
+</body>
+</html>
