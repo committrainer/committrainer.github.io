@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>コミットレーナー</title>
-<!-- コミットレーナー 段階4(2026-11-18)。LINE ミニアプリの画面。記録をつける・記録を見る・設定・はじめの設定。 -->
+<!-- コミットレーナー 段階4(2026-11-18)。LINE ミニアプリの画面。記録をつける・記録を見る・設定・はじめの設定。
+     2026-11-25: ジムの内容を、ノートの形(はじめから6つの表、種目は押して選ぶ、①〜⑤セット、種目ごとのメモ)に作り直した。 -->
 <style>
   :root {
     --orange: #F28C28; --orange-dark: #B85C00; --orange-light: #FFF1E0;
@@ -78,14 +79,19 @@
   .goal { font-size: 16px; font-weight: 700; line-height: 1.5; }
   .card.goalbar { border-left: 4px solid var(--orange); padding: 12px 14px; }
   .card.goalbar .goal { font-size: 15px; color: var(--orange-dark); }
-  .liftblock { border-top: 1px solid var(--line); padding: 12px 0; }
-  .liftblock:first-of-type { border-top: 0; padding-top: 4px; }
-  .part { background: var(--navy); color: #fff; border-radius: 6px; font-size: 11px; padding: 2px 6px; }
-  .setrow { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
-  .setno { width: 18px; text-align: center; color: var(--sub); font-size: 13px; flex: none; }
-  input.cellin { width: 76px; flex: none; padding: 8px 10px; text-align: center; }
-  input.cellin::placeholder { color: #C4C4C4; }
-  .x { border: 0; background: none; color: #B0B0B0; font-size: 14px; padding: 6px; margin-left: auto; cursor: pointer; }
+  .lt { padding: 12px 0; }
+  .lt + .lt { border-top: 1px solid var(--line); }
+  .exbtn { display: flex; justify-content: space-between; align-items: center; width: 100%; border: 1px solid var(--line);
+    background: #fff; border-radius: 10px; padding: 10px 12px; font-size: 16px; font-weight: 700; text-align: left; cursor: pointer; }
+  .exbtn.empty { color: var(--sub); font-weight: 400; border-style: dashed; }
+  .grp { font-size: 12px; color: var(--sub); font-weight: 700; margin: 8px 0 6px; }
+  .setswrap { overflow-x: auto; }
+  .sets { display: grid; gap: 4px; margin-top: 8px; align-items: center; }
+  .sets .h { text-align: center; font-size: 12px; color: var(--sub); }
+  .sets input[type=text] { width: 100%; min-width: 0; padding: 8px 2px; text-align: center; border-radius: 8px; font-size: 16px; }
+  .sets input[type=text]::placeholder { color: #C4C4C4; }
+  .sets input[readonly], input.exmemo[readonly] { background: var(--gray); }
+  input.exmemo[type=text] { margin-top: 6px; padding: 8px 10px; border-radius: 8px; font-size: 16px; }
   .linkbtn { border: 0; background: none; color: var(--orange-dark); font-weight: 700; font-size: 14px; padding: 8px 0 0; cursor: pointer; }
   .picker { border: 1px dashed var(--line); border-radius: 12px; padding: 12px; margin-top: 8px; }
   .opts { display: grid; gap: 8px; }
@@ -148,6 +154,18 @@ const CHOICES = {
   gymEver: ['ある', 'ない'],
   gymNow: ['通っている', '契約しているけど、あまり行けていない', '家でやっている', 'まだ何もしていない']
 };
+// ジムの内容で、押して選べる種目(ブロの紙の記録と筋トレメニューから。11/25)。部位の言葉は GAS の BODY_PARTS と同じにする。
+const PRESETS = [
+  ['胸', ['ベンチプレス', 'テンポベンチ', 'ラーセンプレス', 'インクラインプレス', 'インクラインマシンプレス', 'インクラインダンベルプレス', 'ペックフライ', 'ケーブルフライ(上部)', 'ケーブルフライ(下部)', 'ディップス']],
+  ['背中', ['プルアップ', 'チンニング', 'ワイドプルダウン', 'ナロープルダウン', 'Tバーロウ', 'ダイバージングロウ', 'ベントオーバーロー', 'ロー(ワイド)', 'ケーブルプルオーバー']],
+  ['肩', ['ショルダープレス', 'ラテラルレイズ', 'プレートレイズ', 'リアデルト']],
+  ['腕', ['プッシュダウン', 'エクステンション', 'カール', 'バイセップカール(マシン)', 'ハンマーカール', 'ハンマーカール(ケーブル)']],
+  ['脚', ['スクワット', 'アングルスクワット', 'アングルドレッグプレス', 'レッグカール', 'レッグエクステンション']],
+  ['腹', ['腹筋', 'アブドミナル(ケーブル)']]
+];
+const LIFT_SLOTS = 6;  // はじめから空けておく表の数
+const SET_COLS = 5;    // 1つの表のセットの数
+const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳';
 
 // ---------------------------------------------------------------- 状態
 let S = null;          // GAS から届いた状態
@@ -159,7 +177,9 @@ let draft = null;      // 設定の書きかけ
 let diaryReply = '';
 let selDay = '';       // 記録を見る で選んだ日
 let selEx = '';        // 記録を見る で選んだ種目
-let liftPicker = null;  // 種目を足すときの書きかけ { ex, part }
+let slots = [];        // ジムの内容の表の並び(1つずつ、記録の id か、空なら null)
+let slotsDate = '';    // slots がどの日のものか
+let pickSlot = -1;     // 種目の一覧を開いている表(開いていなければ -1)
 let W = null;          // はじめの設定の書きかけ
 
 const $app = document.getElementById('app');
@@ -354,8 +374,6 @@ function renderRecord() {
     } }, [el('span', { class: 'mark', text: done ? '✅' : '⬜' }), el('span', { text: name })]);
   }))));
 
-  out.push(renderLiftCard(day));
-
   // 調子
   out.push(el('section', { class: 'card' }, [
     el('h2', { text: '今日の調子' }),
@@ -398,123 +416,152 @@ function renderRecord() {
   const diaryCard = el('section', { class: 'card' }, [el('h2', { text: '一言日記' }), ta, saveBtn]);
   if (diaryReply) diaryCard.appendChild(el('div', { class: 'reply', text: diaryReply }));
   out.push(diaryCard);
+
+  // ジムの内容は、いちばん下(ユーザー、11/25)
+  out.push(renderLiftCard(day));
   return out;
 }
 
-// ジムの内容。ブロのノートの形(部位 → 種目 → 1セットずつ「重さ×回数」→ メモ)と、記録アプリの形を合わせた(11/18)。
-// 打った欄から離れたときに、その種目をまるごと自動で保存する。前回の値を、薄い字で出す。
+// ジムの内容(11/25 に作り直し)。ブロのジムのノートの形にした。
+// - 表をはじめから6つ置く。種目は押して選ぶだけ(部位は選ばない。一覧の部位から自動で付ける)。
+// - 1つの表に ①〜⑤ セット。上の段が重さ(kg)、下の段が回数。種目ごとにメモ。
+// - マスの薄い数字は、その種目の前回の記録。
+// - 打った欄から離れたときに、その種目をまるごと自動で保存する。
+function syncSlots(day) {
+  if (slotsDate !== S.today) { slots = []; slotsDate = S.today; pickSlot = -1; }
+  slots = slots.map(function (id) { return id && day.lifts[id] ? id : null; });
+  Object.keys(day.lifts).forEach(function (id) {
+    if (slots.indexOf(id) >= 0) return;
+    const k = slots.indexOf(null);
+    if (k >= 0) slots[k] = id; else slots.push(id);
+  });
+  while (slots.length < LIFT_SLOTS) slots.push(null);
+}
+function presetPart(ex) {
+  for (let i = 0; i < PRESETS.length; i++) if (PRESETS[i][1].indexOf(ex) >= 0) return PRESETS[i][0];
+  return '';
+}
 function renderLiftCard(day) {
-  const date = S.today;
-  const gym = day.gym || { start: '', note: '' };
-  const saveMeta = function () { send({ api: 'lift', op: 'meta', start: gym.start, note: gym.note }, null, true); };
-  const start = el('input', { type: 'time', value: gym.start || '', style: 'width:auto;padding:8px 10px' });
-  start.addEventListener('change', function () { gym.start = start.value; day.gym = gym; saveMeta(); });
+  syncSlots(day);
   const card = el('section', { class: 'card' }, [
-    el('div', { class: 'inline', style: 'justify-content:space-between;margin-bottom:8px' }, [
-      el('h2', { text: 'ジムの内容', style: 'margin:0' }),
-      el('label', { class: 'inline note' }, ['開始 ', start])
-    ])
+    el('h2', { text: 'ジムの内容' }),
+    el('div', { class: 'note', style: 'margin:-4px 0 4px', text: '種目を選んで、重さと回数を打つだけです。薄い数字は、前回の記録です。' })
   ]);
-
-  Object.keys(day.lifts).forEach(function (id) { card.appendChild(liftBlock(day, id)); });
-
-  // 種目を足す
-  if (!liftPicker) {
-    card.appendChild(el('button', { class: 'btn ghost wide', text: '+ 種目を足す', onclick: function () { liftPicker = { ex: '', part: '' }; render(); } }));
-  } else {
-    const recent = [];
-    for (let i = S.lifts.length - 1; i >= 0 && recent.length < 12; i--) {
-      if (!recent.some(function (r) { return r[0] === S.lifts[i][1]; })) recent.push([S.lifts[i][1], S.lifts[i][2]]);
-    }
-    const addEx = function (ex, part) {
-      ex = String(ex).replace(/[#\n]/g, ' ').trim().slice(0, 20);
-      if (!ex) return toast('種目を入れてください');
-      const prev = prevSession(ex);
-      const n = prev ? Math.max(1, prev[3].length) : 1;
-      const id = newLiftId(ex);
-      day.lifts[id] = { ex: ex, part: part || (prev && prev[2]) || '', sets: Array.apply(null, Array(n)).map(function () { return ['', '']; }) };
-      S.days[date] = day;
-      liftPicker = null;
-      render();
-      send({ api: 'lift', op: 'put', id: id, part: day.lifts[id].part, sets: day.lifts[id].sets }, null, true);
-    };
-    const pick = el('div', { class: 'picker' }, [el('div', { class: 'note', text: '前にやった種目' })]);
-    if (recent.length) {
-      pick.appendChild(el('div', { class: 'chips', style: 'margin-top:6px' }, recent.map(function (r) {
-        return el('button', { class: 'chip', text: (r[1] ? r[1] + '・' : '') + r[0], onclick: function () { addEx(r[0], r[1]); } });
-      })));
-    } else {
-      pick.appendChild(el('div', { class: 'note', style: 'margin:4px 0 8px', text: 'まだありません。下に種目の名前を入れてください。' }));
-    }
-    const name = el('input', { type: 'text', maxlength: '20', placeholder: '新しい種目(例: ケーブルフライ)', value: liftPicker.ex });
-    name.addEventListener('input', function () { liftPicker.ex = name.value; });
-    pick.appendChild(el('div', { class: 'field' }, [el('label', { class: 'f', text: '新しい種目' }), name]));
-    pick.appendChild(el('div', { class: 'chips', style: 'margin-top:8px' }, (S.parts || []).map(function (p) {
-      return el('button', { class: 'chip' + (liftPicker.part === p ? ' on' : ''), text: p, onclick: function () { liftPicker.part = liftPicker.part === p ? '' : p; render(); } });
-    })));
-    pick.appendChild(el('div', { class: 'wiznav', style: 'margin-top:8px' }, [
-      el('button', { class: 'btn ghost', text: 'やめる', onclick: function () { liftPicker = null; render(); } }),
-      el('button', { class: 'btn', text: '足す', onclick: function () { addEx(liftPicker.ex, liftPicker.part); } })
-    ]));
-    card.appendChild(pick);
+  slots.forEach(function (id, i) { card.appendChild(liftTable(day, i)); });
+  if (slots.indexOf(null) < 0) {
+    card.appendChild(el('button', { class: 'linkbtn', text: '+ 表を足す', onclick: function () { slots.push(null); render(); } }));
   }
-
-  // メモ(ノートのひとこと)
-  const memo = el('textarea', { maxlength: '500', placeholder: 'メモ(例: ショルダープレス久しぶりだから軽めに)', style: 'min-height:64px;margin-top:12px' });
-  memo.value = gym.note || '';
-  memo.addEventListener('change', function () { gym.note = memo.value; day.gym = gym; saveMeta(); });
-  card.appendChild(memo);
   return card;
 }
 
-// 1つの種目のブロック。セットを1行ずつ「重さ × 回数」。
-function liftBlock(day, id) {
-  const l = day.lifts[id];
-  const prev = prevSession(l.ex);
-  const rowsBox = el('div', {});
-  const sync = function () { // 画面に打たれている値を、そのまま記録の形にする
-    l.sets = Array.prototype.map.call(rowsBox.querySelectorAll('.setrow'), function (r) {
-      const i = r.querySelectorAll('input');
-      return [i[0].value.trim(), i[1].value.trim()];
-    });
-  };
-  const save = function () { sync(); send({ api: 'lift', op: 'put', id: id, part: l.part, sets: l.sets }, null, true); };
-  l.sets.forEach(function (s, n) {
-    const ps = prev && prev[3][n] ? prev[3][n] : null;
-    const kg = el('input', { type: 'text', inputmode: 'decimal', value: s[0], placeholder: ps ? String(ps[0]) : 'kg', class: 'cellin' });
-    const reps = el('input', { type: 'text', inputmode: 'numeric', value: s[1], placeholder: ps ? String(ps[1]) : '回', class: 'cellin' });
-    kg.addEventListener('change', save);
-    reps.addEventListener('change', save);
-    rowsBox.appendChild(el('div', { class: 'setrow' }, [
-      el('span', { class: 'setno', text: String(n + 1) }), kg, el('span', { class: 'note', text: 'kg ×' }), reps, el('span', { class: 'note', text: '回' }),
-      el('button', { class: 'x', text: '✕', 'aria-label': (n + 1) + 'セット目を消す', onclick: function () {
-        sync();
-        l.sets.splice(n, 1);
-        render();
-        send({ api: 'lift', op: 'put', id: id, part: l.part, sets: l.sets }, null, true);
-      } })
-    ]));
-  });
-  return el('div', { class: 'liftblock' }, [
-    el('div', { class: 'inline', style: 'justify-content:space-between' }, [
-      el('div', { class: 'inline' }, [l.part ? el('span', { class: 'part', text: l.part }) : null, el('b', { text: l.ex })]),
-      el('button', { class: 'btn ghost small', text: '消す', onclick: function () {
-        if (!confirm(l.ex + ' を消しますか？')) return;
-        delete day.lifts[id];
-        render();
-        send({ api: 'lift', op: 'del', id: id }, null, true);
-      } })
-    ]),
-    prev ? el('div', { class: 'note', style: 'margin:4px 0 2px', text: '前回 ' + fmtDay(prev[0]) + ': ' + setsText(prev[3]) }) : null,
-    rowsBox,
-    el('button', { class: 'linkbtn', text: '+ セットを足す', onclick: function () {
-      sync();
-      const last = l.sets.length ? l.sets[l.sets.length - 1] : ['', ''];
-      l.sets.push([last[0], last[1]]); // 前のセットと同じ値を入れておく(違えば直す)
-      render();
-      send({ api: 'lift', op: 'put', id: id, part: l.part, sets: l.sets }, null, true);
-    } })
+// 1つの表。種目のボタン → ①〜⑤(重さの段と回数の段)→ メモ。
+function liftTable(day, i) {
+  const id = slots[i];
+  const l = id ? day.lifts[id] : null;
+  const prev = l ? prevSession(l.ex) : null;
+  const openPicker = function () { pickSlot = i; render(); };
+  const box = el('div', { class: 'lt' }, [
+    el('button', { class: 'exbtn' + (l ? '' : ' empty'), onclick: function () { pickSlot = pickSlot === i ? -1 : i; render(); } }, [
+      el('span', { text: l ? l.ex : '種目を選ぶ' }), el('span', { class: 'note', text: pickSlot === i ? '▲' : '▼' })
+    ])
   ]);
+  if (pickSlot === i) box.appendChild(exPicker(day, i));
+
+  const n = Math.max(SET_COLS, l ? l.sets.length : 0);
+  const grid = el('div', { class: 'sets', style: 'grid-template-columns:28px repeat(' + n + ',' + (n > SET_COLS ? '44px' : 'minmax(0,1fr)') + ')' });
+  const cells = [[], []]; // [重さの欄, 回数の欄]
+  const save = function () {
+    const sets = [];
+    for (let k = 0; k < n; k++) sets.push([cells[0][k].value.trim(), cells[1][k].value.trim()]);
+    while (sets.length && sets[sets.length - 1][0] === '' && sets[sets.length - 1][1] === '') sets.pop();
+    l.sets = sets;
+    send({ api: 'lift', op: 'put', id: id, part: l.part, sets: sets, note: l.note || '' }, null, true);
+  };
+  grid.appendChild(el('span', {}));
+  for (let k = 0; k < n; k++) grid.appendChild(el('span', { class: 'h', text: CIRCLED.charAt(k) || String(k + 1) }));
+  ['kg', '回'].forEach(function (label, row) {
+    grid.appendChild(el('span', { class: 'h', text: label }));
+    for (let k = 0; k < n; k++) {
+      const s = l && l.sets[k] ? l.sets[k] : ['', ''];
+      const ps = prev && prev[3][k] ? prev[3][k] : null;
+      const input = el('input', { type: 'text', inputmode: row ? 'numeric' : 'decimal',
+        value: s[row] == null ? '' : String(s[row]),
+        placeholder: ps && ps[row] !== '' && ps[row] != null ? String(ps[row]) : '',
+        readonly: !l, 'aria-label': (k + 1) + 'セット目の' + (row ? '回数' : '重さ') });
+      if (l) input.addEventListener('change', save);
+      else input.addEventListener('focus', function () { input.blur(); openPicker(); }); // 種目を選ぶまでは、一覧を開く
+      cells[row].push(input);
+      grid.appendChild(input);
+    }
+  });
+  box.appendChild(el('div', { class: 'setswrap' }, [grid]));
+
+  const memo = el('input', { type: 'text', class: 'exmemo', maxlength: '200', value: l && l.note ? l.note : '', readonly: !l,
+    placeholder: l ? 'メモ(例: 左肩に違和感があった)' : 'メモ' });
+  if (l) memo.addEventListener('change', function () { l.note = memo.value.trim(); save(); });
+  else memo.addEventListener('focus', function () { memo.blur(); openPicker(); });
+  box.appendChild(memo);
+  if (prev) box.appendChild(el('div', { class: 'note', style: 'margin-top:4px', text: '前回 ' + fmtDay(prev[0]) + ': ' + (setsText(prev[3]) || '—') }));
+  return box;
+}
+
+// 種目の一覧。押すと、その表の種目になる。
+function exPicker(day, i) {
+  const cur = slots[i] ? day.lifts[slots[i]] : null;
+  const choose = function (name) {
+    const ex = String(name).replace(/[#\n]/g, ' ').trim().slice(0, 20);
+    if (!ex) return toast('種目の名前を入れてください');
+    pickSlot = -1;
+    if (cur && cur.ex === ex) return render();
+    const prev = prevSession(ex);
+    const part = presetPart(ex) || (prev && prev[2]) || '';
+    const sets = cur ? cur.sets : [];        // 種目を選び直したときは、打った数字をそのまま引き継ぐ
+    const note = cur ? (cur.note || '') : '';
+    if (cur) {
+      const old = slots[i];
+      delete day.lifts[old];
+      send({ api: 'lift', op: 'del', id: old }, null, true);
+    }
+    const id = newLiftId(ex);
+    day.lifts[id] = { ex: ex, part: part, sets: sets, note: note };
+    S.days[S.today] = day;
+    slots[i] = id;
+    render();
+    send({ api: 'lift', op: 'put', id: id, part: part, sets: sets, note: note }, null, true);
+  };
+  const chipList = function (names) {
+    return el('div', { class: 'chips' }, names.map(function (name) {
+      return el('button', { class: 'chip' + (cur && cur.ex === name ? ' on' : ''), text: name, onclick: function () { choose(name); } });
+    }));
+  };
+  const box = el('div', { class: 'picker' });
+  const recent = [];
+  for (let k = S.lifts.length - 1; k >= 0 && recent.length < 8; k--) if (recent.indexOf(S.lifts[k][1]) < 0) recent.push(S.lifts[k][1]);
+  if (recent.length) {
+    box.appendChild(el('div', { class: 'grp', text: '最近やった種目' }));
+    box.appendChild(chipList(recent));
+  }
+  PRESETS.forEach(function (g) {
+    box.appendChild(el('div', { class: 'grp', text: g[0] }));
+    box.appendChild(chipList(g[1]));
+  });
+  const custom = el('input', { type: 'text', maxlength: '20', placeholder: '一覧にない種目(20文字まで)' });
+  box.appendChild(el('div', { class: 'grp', text: '自分で足す' }));
+  box.appendChild(el('div', { class: 'inline' }, [custom, el('button', { class: 'btn ghost', text: '決める', onclick: function () { choose(custom.value); } })]));
+  const foot = [el('button', { class: 'btn ghost small', text: 'とじる', onclick: function () { pickSlot = -1; render(); } })];
+  if (cur) {
+    foot.unshift(el('button', { class: 'btn ghost small', text: 'この表を空にする', onclick: function () {
+      if (!confirm(cur.ex + ' の記録を消しますか？')) return;
+      const old = slots[i];
+      delete day.lifts[old];
+      slots[i] = null;
+      pickSlot = -1;
+      render();
+      send({ api: 'lift', op: 'del', id: old }, null, true);
+    } }));
+  }
+  box.appendChild(el('div', { class: 'inline', style: 'justify-content:space-between;margin-top:12px' }, foot));
+  return box;
 }
 
 // ---------------------------------------------------------------- 画面: 記録を見る
@@ -557,7 +604,7 @@ function renderView() {
   Object.keys(day.lifts).forEach(function (id) {
     const l = day.lifts[id];
     const p = l.part || 'その他';
-    (byPart[p] = byPart[p] || []).push(l.ex + '  ' + (setsText(l.sets) || '—'));
+    (byPart[p] = byPart[p] || []).push(l.ex + '  ' + (setsText(l.sets) || '—') + (l.note ? '\n  メモ: ' + l.note : ''));
   });
   const gymLines = [];
   (S.parts || []).concat(Object.keys(byPart)).forEach(function (p) {
