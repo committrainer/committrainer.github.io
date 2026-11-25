@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>コミットレーナー</title>
 <!-- コミットレーナー 段階4(2026-11-18)。LINE ミニアプリの画面。記録をつける・記録を見る・設定・はじめの設定。
-     2026-11-25: ジムの内容を、ノートの形(はじめから6つの表、種目は押して選ぶ、①〜⑤セット、種目ごとのメモ)に作り直した。 -->
+     2026-11-25: ジムの内容を、ノートの形(はじめから6つの表、種目は押して選ぶ、①〜⑤セット、種目ごとのメモ)に作り直した。
+     2026-11-25 夜: 同意を飛ばせないようにした(プライバシーポリシー)。自分で足す種目に部位を付け、一覧に残し、✕ で消せるようにした。 -->
 <style>
   :root {
     --orange: #F28C28; --orange-dark: #B85C00; --orange-light: #FFF1E0;
@@ -85,6 +86,10 @@
     background: #fff; border-radius: 10px; padding: 10px 12px; font-size: 16px; font-weight: 700; text-align: left; cursor: pointer; }
   .exbtn.empty { color: var(--sub); font-weight: 400; border-style: dashed; }
   .grp { font-size: 12px; color: var(--sub); font-weight: 700; margin: 8px 0 6px; }
+  .chipx { display: inline-flex; align-items: stretch; }
+  .chipx .chip { border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: 0; }
+  .chipdel { border: 1px solid var(--line); background: #fff; border-radius: 0 999px 999px 0; padding: 6px 10px 6px 6px;
+    color: #B0B0B0; font-size: 13px; cursor: pointer; }
   .setswrap { overflow-x: auto; }
   .sets { display: grid; gap: 4px; margin-top: 8px; align-items: center; }
   .sets .h { text-align: center; font-size: 12px; color: var(--sub); }
@@ -181,6 +186,7 @@ let selEx = '';        // 記録を見る で選んだ種目
 let slots = [];        // ジムの内容の表の並び(1つずつ、記録の id か、空なら null)
 let slotsDate = '';    // slots がどの日のものか
 let pickSlot = -1;     // 種目の一覧を開いている表(開いていなければ -1)
+let newEx = { name: '', part: '' }; // 自分で足す種目の書きかけ(11/25)
 let W = null;          // はじめの設定の書きかけ
 
 const $app = document.getElementById('app');
@@ -302,6 +308,7 @@ function fixState(s) {
   s.parts = s.parts || ['胸', '背中', '肩', '腕', '脚', '腹', 'その他'];
   s.days = s.days || {};
   s.user.profile = s.user.profile || {};
+  s.user.customEx = s.user.customEx || [];
   if (s.user.setupDone === undefined) s.user.setupDone = true;
   return s;
 }
@@ -443,6 +450,10 @@ function presetPart(ex) {
   for (let i = 0; i < PRESETS.length; i++) if (PRESETS[i][1].indexOf(ex) >= 0) return PRESETS[i][0];
   return '';
 }
+function customPart(ex) { // 自分で足した種目の部位
+  const c = (S.user.customEx || []).filter(function (x) { return x[0] === ex; })[0];
+  return c ? c[1] : '';
+}
 function renderLiftCard(day) {
   syncSlots(day);
   const card = el('section', { class: 'card' }, [
@@ -516,7 +527,7 @@ function exPicker(day, i) {
     pickSlot = -1;
     if (cur && cur.ex === ex) return render();
     const prev = prevSession(ex);
-    const part = presetPart(ex) || (prev && prev[2]) || '';
+    const part = presetPart(ex) || customPart(ex) || (prev && prev[2]) || '';
     const sets = cur ? cur.sets : [];        // 種目を選び直したときは、打った数字をそのまま引き継ぐ
     const note = cur ? (cur.note || '') : '';
     if (cur) {
@@ -531,25 +542,50 @@ function exPicker(day, i) {
     render();
     send({ api: 'lift', op: 'put', id: id, part: part, sets: sets, note: note }, null, true);
   };
-  const chipList = function (names) {
-    return el('div', { class: 'chips' }, names.map(function (name) {
-      return el('button', { class: 'chip' + (cur && cur.ex === name ? ' on' : ''), text: name, onclick: function () { choose(name); } });
-    }));
+  // 種目のボタン。自分で足した種目には ✕ を付けて、一覧から消せるようにする(記録は残る。ユーザー、11/25)
+  const chip = function (name, removable) {
+    const b = el('button', { class: 'chip' + (cur && cur.ex === name ? ' on' : ''), text: name, onclick: function () { choose(name); } });
+    if (!removable) return b;
+    return el('span', { class: 'chipx' }, [b, el('button', { class: 'chipdel', text: '✕', 'aria-label': name + ' を一覧から消す', onclick: function () {
+      if (!confirm(name + ' を一覧から消しますか？\n(これまでの記録は残ります)')) return;
+      S.user.customEx = S.user.customEx.filter(function (c) { return c[0] !== name; });
+      render();
+      send({ api: 'exercise', op: 'del', ex: name }, null, true);
+    } })]);
   };
   const box = el('div', { class: 'picker' });
   const recent = [];
   for (let k = S.lifts.length - 1; k >= 0 && recent.length < 8; k--) if (recent.indexOf(S.lifts[k][1]) < 0) recent.push(S.lifts[k][1]);
   if (recent.length) {
     box.appendChild(el('div', { class: 'grp', text: '最近やった種目' }));
-    box.appendChild(chipList(recent));
+    box.appendChild(el('div', { class: 'chips' }, recent.map(function (n) { return chip(n, false); })));
   }
-  PRESETS.forEach(function (g) {
+  // 部位ごとに、最初から入っている種目 → 自分で足した種目 の順。「その他」は自分で足した種目があるときだけ出す。
+  PRESETS.concat([['その他', []]]).forEach(function (g) {
+    const mine = S.user.customEx.filter(function (c) { return c[1] === g[0]; }).map(function (c) { return c[0]; });
+    if (!g[1].length && !mine.length) return;
     box.appendChild(el('div', { class: 'grp', text: g[0] }));
-    box.appendChild(chipList(g[1]));
+    box.appendChild(el('div', { class: 'chips' }, g[1].map(function (n) { return chip(n, false); }).concat(mine.map(function (n) { return chip(n, true); }))));
   });
-  const custom = el('input', { type: 'text', maxlength: '20', placeholder: '一覧にない種目(20文字まで)' });
+  // 自分で足す: 名前と部位を決める。足した種目は、次から一覧のその部位のところに出る(ユーザー、11/25)
+  const custom = el('input', { type: 'text', maxlength: '20', placeholder: '一覧にない種目(20文字まで)', value: newEx.name });
+  custom.addEventListener('input', function () { newEx.name = custom.value; });
   box.appendChild(el('div', { class: 'grp', text: '自分で足す' }));
-  box.appendChild(el('div', { class: 'inline' }, [custom, el('button', { class: 'btn ghost', text: '決める', onclick: function () { choose(custom.value); } })]));
+  box.appendChild(custom);
+  box.appendChild(el('div', { class: 'chips', style: 'margin-top:8px' }, (S.parts || []).map(function (p) {
+    return el('button', { class: 'chip' + (newEx.part === p ? ' on' : ''), text: p, onclick: function () { newEx.part = newEx.part === p ? '' : p; render(); } });
+  })));
+  box.appendChild(el('button', { class: 'btn ghost wide', style: 'margin-top:0', text: '足して選ぶ', onclick: function () {
+    const ex = String(newEx.name).replace(/[#\n,]/g, ' ').trim().slice(0, 20);
+    if (!ex) return toast('種目の名前を入れてください');
+    if (!presetPart(ex) && !customPart(ex)) {
+      if (!newEx.part) return toast('部位を選んでください');
+      S.user.customEx.push([ex, newEx.part]);
+      send({ api: 'exercise', op: 'add', ex: ex, part: newEx.part }, null, true);
+    }
+    newEx = { name: '', part: '' };
+    choose(ex);
+  } }));
   const foot = [el('button', { class: 'btn ghost small', text: 'とじる', onclick: function () { pickSlot = -1; render(); } })];
   if (cur) {
     foot.unshift(el('button', { class: 'btn ghost small', text: 'この表を空にする', onclick: function () {
