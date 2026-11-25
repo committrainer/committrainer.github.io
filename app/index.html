@@ -134,6 +134,7 @@
 // ---------------------------------------------------------------- 設定
 const LIFF_ID = '2012681803-qywvqrPo'; // 本番用
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwVu-c1axrkJg6-0V7qVEvl1SwNQouhXFHYq_nlNqukYx64JDV40rF7kX4vz0glsUuZ4Q/exec'; // GAS のデプロイの URL
+const PRIVACY_URL = 'https://committrainer.github.io/app/privacy.html'; // プライバシーポリシー(11/25)
 
 // 設定で選べる項目(設計書 6)。名前は記録に残るので、変えるときは前の名前の記録に気をつける。
 const ITEM_CHOICES = [
@@ -258,6 +259,7 @@ function fatal(text) {
 const ERRORS = {
   auth: 'ログインの期限が切れました。画面を閉じて、もう一度開いてください。',
   setup: '先に、トークで最初の設定を終えてください。',
+  consent: 'はじめに、記録の扱いへの同意をお願いします。',
   friend: '先に、コミットレーナーを友だち追加してください。',
   server: 'うまく保存できませんでした。少し時間をおいて、もう一度試してください。',
   bad: '入力を確かめて、もう一度試してください。',
@@ -755,6 +757,9 @@ function renderSettings() {
     });
   } });
   out.push(save);
+  out.push(el('div', { style: 'text-align:center;margin-top:16px' }, [
+    el('a', { href: PRIVACY_URL, target: '_blank', rel: 'noopener', style: 'color:#777;font-size:13px', text: 'プライバシーポリシー' })
+  ]));
   return out;
 }
 function dayPicker(value, onChange) {
@@ -822,16 +827,17 @@ const STEPS = [
         el('section', { class: 'card', style: 'margin-top:14px' }, [
           el('h2', { text: '記録の扱いについて' }),
           el('div', { class: 'note', style: 'line-height:1.7;font-size:13px;white-space:pre-wrap', text:
+            '・ご利用は、18歳以上の方に限ります。\n' +
             '・答えと記録は、毎日の記録と AI の返事のためだけに使います。\n' +
-            '・記録は運営者の Google スプレッドシートに保存します。AI の返事を作るときに、Anthropic(アメリカの AI の会社)へ送ります。\n' +
-            '・病気やけがのことは書かないでください。体の不調は医師に相談してください。\n' +
-            '・記録を消してほしいときは、トークで伝えてください。\n' +
-            '・くわしいプライバシーポリシーは準備中です。' }),
-          el('label', { class: 'inline', style: 'margin-top:12px' }, [box, el('span', { text: '上の内容に同意する' })])
+            '・記録は、Google のスプレッドシート(Google LLC・アメリカ)に保存します。AI の返事を作るときは、Anthropic(Anthropic, PBC・アメリカ)へ送ります。\n' +
+            '・アメリカの制度と、2社の取り組みは、プライバシーポリシーの6番に書いています。\n' +
+            '・病気やけがなど、体の不調のことは書かないでください。体の不調は、医師に相談してください。' }),
+          el('a', { href: PRIVACY_URL, target: '_blank', rel: 'noopener', style: 'display:inline-block;margin-top:8px;color:#B85C00;font-weight:700;font-size:14px', text: 'プライバシーポリシーを読む' }),
+          el('label', { class: 'inline', style: 'margin-top:12px;align-items:flex-start' }, [box, el('span', { style: 'font-size:14px;line-height:1.6', text: 'プライバシーポリシーを読み、アメリカに送ることも含めて同意します(18歳以上です)' })])
         ])
       ];
     },
-    check: function () { return W.consent ? '' : '「同意する」にチェックを入れてください'; }
+    check: function () { return W.consent ? '' : '同意のチェックを入れてください'; }
   },
   { // 1 呼び方・年齢・性別
     render: function () {
@@ -955,7 +961,8 @@ function renderSetup() {
   const out = [
     el('div', { class: 'inline', style: 'justify-content:space-between' }, [
       el('div', { class: 'sub', text: 'はじめの設定 ' + (W.step + 1) + ' / ' + STEPS.length }),
-      el('button', { class: 'btn ghost small', text: 'あとで', onclick: function () { W = null; tab = 'record'; render(); } })
+      // 同意だけは飛ばせない(11/25)。「あとで」は同意したあとに出す。
+      S.user.profile.consented ? el('button', { class: 'btn ghost small', text: 'あとで', onclick: function () { W = null; tab = 'record'; render(); } }) : null
     ]),
     el('div', { class: 'progress' }, [el('i', { style: 'width:' + Math.round((W.step + 1) / STEPS.length * 100) + '%' })])
   ].concat(st.render());
@@ -963,6 +970,14 @@ function renderSetup() {
   const next = el('button', { class: 'btn', text: last ? 'この内容で決定' : '次へ', onclick: function () {
     const err = st.check ? st.check() : '';
     if (err) return toast(err);
+    // 1問目の同意は、その場で保存する(同意してから、記録や AI が使えるようになる。11/25)
+    if (W.step === 0 && !S.user.profile.consented) {
+      next.disabled = true;
+      return send({ api: 'consent' }, function (res) {
+        next.disabled = false;
+        if (res.ok) moveStep(1);
+      });
+    }
     if (!last) return moveStep(1);
     next.disabled = true;
     next.textContent = '保存しています…';
@@ -977,6 +992,8 @@ function renderSetup() {
 
 // ---------------------------------------------------------------- 全体
 function render() {
+  // 同意がまだの人は、何よりも先に同意の画面を出す(11/25)
+  if (S && !(S.user.profile && S.user.profile.consented) && tab !== 'setup') return openSetup(0);
   const nav = document.getElementById('nav');
   nav.hidden = tab === 'setup';
   Array.prototype.forEach.call(nav.querySelectorAll('button'), function (b) { b.classList.toggle('on', b.dataset.tab === tab); });
